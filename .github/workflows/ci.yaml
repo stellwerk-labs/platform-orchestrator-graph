@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+      - name: setup-go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: test
+        run: go tool gotestsum --format github-actions -- --coverprofile=cover.out
+      - name: lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+      - name: tidy
+        run: go mod tidy
+      - name: generate
+        run: go generate ./...
+      - name: diff
+        run: git diff --exit-code
+  release:
+    needs:
+      - test
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: read
+      id-token: write
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: checkout
+        uses: actions/checkout@v6
+      - id: release
+        uses: stellwerk-labs/semantic-release-action@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

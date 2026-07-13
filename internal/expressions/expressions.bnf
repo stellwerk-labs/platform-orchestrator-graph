@@ -1,0 +1,60 @@
+/* Lexical Part */
+
+_lchar : 'a'-'z' ;
+_uchar : 'A'-'Z' ;
+_digit : '0'-'9' ;
+_idchar : _lchar | _uchar | _digit | '_' | '-' ;
+_dotid : '.' _idchar {_idchar} ;
+_filter_char : _idchar | '@' | '#' | '.' ;
+_func_char : _lchar | _digit | '_' ;
+
+key : _idchar {_idchar} ;
+traversal : _dotid {_dotid} ;
+filter : '\'' {_filter_char} '\'' ;
+
+/* Syntax Part */
+
+<< import "github.com/stellwerk-labs/platform-orchestrator-graph/internal/expressions/types" >>
+
+Expression
+    :   ContextExpression         << $0, nil >>
+    |   VarExpression             << $0, nil >>
+    |   ResourceExpression        << $0, nil >>
+    |   SelectExpression          << $0, nil >>
+    |   SelfExpression            << $0, nil >>
+    ;
+
+ContextExpression
+    :   "context." key             << types.NewContextExpr($1) >>
+    ;
+
+SelfExpression
+    :   "self.outputs." key                 << types.NewSelfExpr($1, nil) >>
+    |   "self.outputs." key traversal       << types.NewSelfExpr($1, $2) >>
+    ;
+
+VarExpression
+    :   "var." key                << types.NewVarExpr($1) >>
+    ;
+
+ResourceExpression
+    :   "resources." key ".outputs." key                  << types.NewResourceExpr($1, $3, nil) >>
+    |   "shared." key ".outputs." key                     << types.NewSharedResourceExpr($1, $3, nil) >>
+    |   "resources." key ".outputs." key traversal        << types.NewResourceExpr($1, $3, $4) >>
+    |   "shared." key ".outputs." key traversal           << types.NewSharedResourceExpr($1, $3, $4) >>
+    ;
+
+FuncCall
+    : "dependencies(" filter ")."           << types.NewFuncCall($0, $1) >>
+    | "consumers(" filter ")."              << types.NewFuncCall($0, $1) >>
+    ;
+
+FuncCallChain
+    : FuncCall                              << types.CollectFuncCalls(nil, $0) >>
+    | FuncCallChain FuncCall                << types.CollectFuncCalls($0, $1) >>
+    ;
+
+SelectExpression
+    :   "select." FuncCallChain "outputs." key                 << types.NewSelectExpression($1, $3, nil) >>
+    |   "select." FuncCallChain "outputs." key traversal       << types.NewSelectExpression($1, $3, $4) >>
+    ;
